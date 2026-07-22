@@ -1,3 +1,29 @@
 <resources>
-    <string name="app_name">Android_AI_Integration</string>
+    <string name="app_name">InkClear</string>
+    <string name="inkclear_title">InkClear</string>
+    <string name="inkclear_subtitle">Handwritten document enhancer</string>
+    <string name="back">Back</string>
+    <string name="document_preview">Document preview</string>
+    <string name="empty_preview_title">Choose a handwritten page</string>
+    <string name="empty_preview_message">InkClear will reduce shadows and make faint writing easier to see.</string>
+    <string name="original">Original</string>
+    <string name="enhanced">Enhanced</string>
+    <string name="visual_mode">Visual mode</string>
+    <string name="natural">Natural</string>
+    <string name="grayscale">Grayscale</string>
+    <string name="black_white">B&amp;W</string>
+    <string name="enhancement_strength">Strength</string>
+    <string name="choose_image">Choose image</string>
+    <string name="ai_scan">AI scan</string>
+    <string name="save_image">Save image</string>
+    <string name="save_pdf">Save PDF</string>
+    <string name="image_load_failed">Could not open that image.</string>
+    <string name="image_process_failed">Could not enhance that image.</string>
+    <string name="image_saved">Enhanced image saved.</string>
+    <string name="pdf_saved">Enhanced PDF saved.</string>
+    <string name="save_failed">Could not save the file.</string>
+    <string name="scanner_unavailable">The AI document scanner is unavailable on this device.</string>
+    <string name="home_description">Make handwritten notes clearer without changing the writer’s original strokes.</string>
+    <string name="start_enhancing">Choose a handwritten image</string>
+    <string name="on_device_note">No storage permission required</string>
 </resources>

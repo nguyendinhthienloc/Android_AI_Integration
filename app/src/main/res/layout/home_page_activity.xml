@@ -1,12 +1,64 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:orientation="vertical"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
-    <TextView
-        android:text="hello world"
-        android:layout_height="wrap_content"
-        android:layout_width="wrap_content">
+    android:layout_height="match_parent"
+    android:background="#F4F7FB"
+    android:gravity="center_horizontal"
+    android:orientation="vertical"
+    android:padding="28dp">
 
-    </TextView>
+    <Space
+        android:layout_width="1dp"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <ImageView
+        android:layout_width="96dp"
+        android:layout_height="96dp"
+        android:background="@drawable/preview_background"
+        android:contentDescription="@null"
+        android:padding="24dp"
+        android:src="@drawable/baseline_document_scanner_24"
+        android:tint="#315E9B" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:text="@string/inkclear_title"
+        android:textColor="#102A52"
+        android:textSize="34sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:gravity="center"
+        android:text="@string/home_description"
+        android:textColor="#60708A"
+        android:textSize="16sp" />
+
+    <Button
+        android:id="@+id/open_inkclear_button"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:layout_marginTop="32dp"
+        android:text="@string/start_enhancing"
+        android:textAllCaps="false"
+        android:textSize="16sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="@string/on_device_note"
+        android:textColor="#71809A"
+        android:textSize="13sp" />
+
+    <Space
+        android:layout_width="1dp"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
 </LinearLayout>
