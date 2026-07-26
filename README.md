@@ -62,7 +62,7 @@ Run the connected Android tests with an emulator or device attached:
 .\gradlew.bat connectedDebugAndroidTest
 ```
 
-The repository currently contains the default example tests. The instrumented test still expects the template package name `com.example.android_ai_integration`; the actual manifest/application ID is `mobile_app.android_ai_integration`, so that assertion should be updated before treating the connected test suite as passing.
+The repository contains a local unit test and an instrumented Android test. The instrumented package assertion has been corrected to `mobile_app.android_ai_integration`; both `test` and `connectedDebugAndroidTest` pass in the verified environment.
 
 ## Typical use
 

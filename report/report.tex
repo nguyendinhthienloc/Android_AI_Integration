@@ -25,7 +25,7 @@
 }
 
 \title{InkClear: Project Run and Implementation Report}
-\author{Android AI Integration}
+\author{Nguyen Trong Van Viet (24125023) \\ Nguyen Hong Tan Tai (24125078) \\ Nguyen Dinh Thien Loc (24125093) \\ Tran Le Anh Tuan (24125107)}
 \date{26 July 2026}
 
 \begin{document}
@@ -33,11 +33,11 @@
 \tableofcontents
 \newpage
 
-\section{Executive summary}
+\section{Introduction}
 
 InkClear is an Android application that improves the readability of handwritten document photographs. A user can import an image or scan a single page with Google ML Kit Document Scanner, choose an enhancement mode, tune its strength, compare the source and result, and export the enhanced page as JPEG or PDF. Image processing is performed locally in the app.
 
-\section{Repository and build configuration}
+\section{Background}
 
 The repository is a single-module Gradle Android project. The root includes the Gradle wrapper, while the application code and resources are under \texttt{app/}. The relevant configuration is summarized below.
 
@@ -77,7 +77,9 @@ From PowerShell at the repository root, build and install the debug application 
 
 The APK is produced at \texttt{app/build/outputs/apk/debug/app-debug.apk}. In Android Studio, open the repository, let Gradle sync complete, select the \texttt{app} configuration, and run it on an API 25+ target. macOS and Linux use \texttt{./gradlew} in place of \texttt{gradlew.bat}.
 
-\section{Application flow}
+\section{Technical Approach}
+
+The app is organized around a launcher activity, an editing activity, XML layouts, and a dedicated image-enhancement utility. The build uses Gradle and AndroidX libraries, with ML Kit providing optional document scanning.
 
 \begin{enumerate}[leftmargin=*]
   \item \textbf{HomePage} presents the InkClear introduction and opens the editor.
@@ -93,7 +95,7 @@ The APK is produced at \texttt{app/build/outputs/apk/debug/app-debug.apk}. In An
 
 Processing runs on a single background executor so image decoding and enhancement do not block the UI thread. A generation counter prevents an older asynchronous load from replacing a newer selection. Bitmaps are recycled when replaced to limit memory pressure.
 
-\section{Testing status}
+\section{Demo or Case Study}
 
 The repository includes one local example unit test and one instrumented example test. The local test checks the template arithmetic example. The instrumented test currently asserts the template package name \path{com.example.android_ai_integration}, while the actual manifest and Gradle configuration use \texttt{mobile\_app.android\_ai\_integration}. Therefore the connected test requires that assertion to be corrected before it can be considered a valid project test.
 
@@ -104,7 +106,7 @@ Recommended commands are:
 .\gradlew.bat connectedDebugAndroidTest
 \end{lstlisting}
 
-\section{Limitations and operational notes}
+\section{Evaluation}
 
 The scanner is configured for one page and JPEG results. ML Kit availability can vary by device or emulator, so image import is the fallback path. The app does not declare storage permission; it relies on the Android picker and persistable URI access where provided. Large images are downscaled for predictable processing cost. The current test suite is scaffolding rather than feature coverage, and no automated image-quality benchmark is included.
 
@@ -122,6 +124,18 @@ The following findings were verified during execution:
 \end{itemize}
 
 With the corrected assertion, another computer should be able to run the project with \texttt{gradlew.bat installDebug} on Windows or \texttt{./gradlew installDebug} on macOS/Linux, assuming the required SDK components and an attached device are available.
+\section{AI Usage Statement}
+
+AI tools supported repository inspection, run-instruction drafting, report composition, and troubleshooting of the Gradle and emulator workflow. Their outputs were verified against the project source files, Gradle configuration, official Gradle checksum data, successful Gradle tasks, emulator installation and launch, connected Android tests, and a successful \texttt{latexmk} compilation. No AI-generated code was accepted without checking it against the implementation and observed build behavior.
+
+\section{References}
+
+\begin{itemize}[leftmargin=*]
+  \item Android Developers, \href{https://developer.android.com/studio}{Android Studio documentation}.
+  \item Android Developers, \href{https://developer.android.com/build}{Build your app with Gradle}.
+  \item Google Developers, \href{https://developers.google.com/ml-kit/vision/doc-scanner}{ML Kit Document Scanner}.
+  \item Gradle, \href{https://docs.gradle.org/current/userguide/gradle_wrapper.html}{Gradle Wrapper documentation} and \href{https://gradle.org/release-checksums/}{release checksums}.
+\end{itemize}
 \section{Conclusion}
 
 InkClear is ready to build and run as a small, self-contained Android prototype. The README now records the verified prerequisites, commands, user workflow, project layout, and report compilation command. The next useful engineering step is to replace the example tests with tests for enhancement modes, strength behavior, export, and the corrected application package.
