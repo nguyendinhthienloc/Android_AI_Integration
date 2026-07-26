@@ -1,0 +1,129 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{listings}
+
+\definecolor{inkblue}{HTML}{17325C}
+\definecolor{codegray}{HTML}{F3F5F7}
+\hypersetup{colorlinks=true,linkcolor=inkblue,urlcolor=inkblue}
+\lstset{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{codegray},
+  frame=single,
+  rulecolor=\color{black!15},
+  columns=fullflexible,
+  breaklines=true,
+  showstringspaces=false
+}
+
+\title{InkClear: Project Run and Implementation Report}
+\author{Android AI Integration}
+\date{26 July 2026}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+\section{Executive summary}
+
+InkClear is an Android application that improves the readability of handwritten document photographs. A user can import an image or scan a single page with Google ML Kit Document Scanner, choose an enhancement mode, tune its strength, compare the source and result, and export the enhanced page as JPEG or PDF. Image processing is performed locally in the app.
+
+\section{Repository and build configuration}
+
+The repository is a single-module Gradle Android project. The root includes the Gradle wrapper, while the application code and resources are under \texttt{app/}. The relevant configuration is summarized below.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{ll}
+\toprule
+Item & Value \\
+\midrule
+Project name & \texttt{Android\_AI\_Integration} \\
+Application label & InkClear \\
+Application ID & \texttt{mobile\_app.android\_ai\_integration} \\
+Minimum SDK & API 25 \\
+Target SDK & API 36 \\
+Compile SDK & API 37.1 \\
+Gradle wrapper & 9.6.1 \\
+Android Gradle Plugin & 9.3.0 \\
+Java compatibility & 11 \\
+Primary external feature & ML Kit Document Scanner 16.0.0 \\
+\bottomrule
+\end{tabular}
+\caption{Verified project configuration.}
+\end{table}
+
+The project uses AndroidX activity, lifecycle, Compose BOM/material dependencies, although the principal screens are XML layouts backed by Java activities. Dependency versions are centralized in \texttt{gradle/libs.versions.toml}.
+
+\section{How to run}
+
+Install Android Studio with SDK Platform 37.1 and use JDK 11 or newer. An emulator or physical device running API 25 or newer is required. The first build needs network access to download the Gradle distribution and Maven dependencies.
+
+From PowerShell at the repository root, build and install the debug application as follows:
+
+\begin{lstlisting}[language={},caption={Windows build commands}]
+.\gradlew.bat assembleDebug
+.\gradlew.bat installDebug
+\end{lstlisting}
+
+The APK is produced at \texttt{app/build/outputs/apk/debug/app-debug.apk}. In Android Studio, open the repository, let Gradle sync complete, select the \texttt{app} configuration, and run it on an API 25+ target. macOS and Linux use \texttt{./gradlew} in place of \texttt{gradlew.bat}.
+
+\section{Application flow}
+
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{HomePage} presents the InkClear introduction and opens the editor.
+  \item \textbf{InkClearActivity} accepts an image from the Android document picker or launches ML Kit's scanner for one page.
+  \item The selected image is decoded, EXIF rotation is applied on older Android versions, and large images are limited to a maximum dimension of 1800 pixels.
+  \item The enhanced image is shown in a preview. The user can switch between original and enhanced views, select a visual mode, and change strength.
+  \item The Android document-creation picker saves the result as JPEG or as a one-page PDF.
+\end{enumerate}
+
+\section{Enhancement pipeline}
+
+\texttt{HandwritingEnhancer} converts the source pixels to luminance, estimates the local page background with a separable box blur, and normalizes luminance against that background. Strength controls the ink boost and, for Black and White mode, the binary threshold. Natural mode restores a portion of the original chroma; Grayscale produces equal RGB channels; Black and White emits only black or white pixels.
+
+Processing runs on a single background executor so image decoding and enhancement do not block the UI thread. A generation counter prevents an older asynchronous load from replacing a newer selection. Bitmaps are recycled when replaced to limit memory pressure.
+
+\section{Testing status}
+
+The repository includes one local example unit test and one instrumented example test. The local test checks the template arithmetic example. The instrumented test currently asserts the template package name \path{com.example.android_ai_integration}, while the actual manifest and Gradle configuration use \texttt{mobile\_app.android\_ai\_integration}. Therefore the connected test requires that assertion to be corrected before it can be considered a valid project test.
+
+Recommended commands are:
+
+\begin{lstlisting}[language={},caption={Test commands}]
+.\gradlew.bat test
+.\gradlew.bat connectedDebugAndroidTest
+\end{lstlisting}
+
+\section{Limitations and operational notes}
+
+The scanner is configured for one page and JPEG results. ML Kit availability can vary by device or emulator, so image import is the fallback path. The app does not declare storage permission; it relies on the Android picker and persistable URI access where provided. Large images are downscaled for predictable processing cost. The current test suite is scaffolding rather than feature coverage, and no automated image-quality benchmark is included.
+
+\section{Known issues and portability}
+
+The project is portable across computers provided that Android Studio, a compatible JDK, Android SDK Platform 37, an API 25 or newer device/emulator, and network access for the first dependency download are available. The Gradle wrapper supplies the Gradle version, so a global Gradle installation is unnecessary. Android Studio's Embedded JDK 17 or 21 is suitable for the Gradle JDK setting.
+
+The following findings were verified during execution:
+
+\begin{itemize}[leftmargin=*]
+  \item The connected example test previously contained a stale template package assertion. It now uses the built application ID \texttt{mobile\_app.android\_ai\_integration}, and the connected test passed on the tested emulator.
+  \item \texttt{installDebug} installs but does not launch the application. The launcher can be started explicitly with \texttt{adb shell am start -n mobile\_app.android\_integration/.HomePage}.
+  \item The native-library strip message for \texttt{libandroidx.graphics.path.so} is a non-fatal packaging warning; the debug APK installed successfully.
+  \item ML Kit scanning depends on device/emulator support. The Android document picker remains the fallback input path.
+\end{itemize}
+
+With the corrected assertion, another computer should be able to run the project with \texttt{gradlew.bat installDebug} on Windows or \texttt{./gradlew installDebug} on macOS/Linux, assuming the required SDK components and an attached device are available.
+\section{Conclusion}
+
+InkClear is ready to build and run as a small, self-contained Android prototype. The README now records the verified prerequisites, commands, user workflow, project layout, and report compilation command. The next useful engineering step is to replace the example tests with tests for enhancement modes, strength behavior, export, and the corrected application package.
+
+\end{document}
