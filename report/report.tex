@@ -13,6 +13,7 @@
 \usepackage{listings}
 \usepackage{longtable}
 \usepackage{graphicx}
+\usepackage{caption}
 \usepackage{tikz}
 \usetikzlibrary{shapes.geometric, arrows.meta, positioning}
 
@@ -194,13 +195,23 @@ Key security guarantees include:
 
 The visual system uses a consistent navy and blue color palette (\texttt{\#17325C}), clear status chips (\texttt{Neural Clean}, \texttt{Offline OCR}), and accessible touch targets ($44\text{--}52\,\text{dp}$).
 
-Figure~\ref{fig:ocr-result-ui} illustrates the user interface layout of \texttt{OcrResultActivity}.
+Figure~\ref{fig:app-ui-screenshots} illustrates the real Android runtime user interface screens of \texttt{InkClearActivity} and \texttt{OcrResultActivity} captured directly on device.
 
 \begin{figure}[htbp]
   \centering
-  \includegraphics[height=0.42\textheight,keepaspectratio]{demo_results/app_screenshot_2_ocr_results.png}
-  \caption{Real Android runtime screenshot of \texttt{OcrResultActivity} captured on device, providing editable multiline text input, runtime metadata chips, and action triggers.}
-  \label{fig:ocr-result-ui}
+  \begin{minipage}[b]{0.46\linewidth}
+    \centering
+    \includegraphics[height=0.38\textheight,keepaspectratio]{demo_results/app_screenshot_1_home.png}
+    \caption*{(a) Main Enhancement Screen}
+  \end{minipage}
+  \hfill
+  \begin{minipage}[b]{0.46\linewidth}
+    \centering
+    \includegraphics[height=0.38\textheight,keepaspectratio]{demo_results/app_screenshot_2_ocr_results.png}
+    \caption*{(b) OCR Results Screen}
+  \end{minipage}
+  \caption{Real Android runtime screenshots captured directly from the running InkClear application on device: (a) main enhancement activity showing status chips, image preview, Natural/Grayscale/B\&W mode selection, and real-time Strength slider; (b) dedicated OCR results activity providing editable multiline text input, source thumbnail, processing metadata, Copy, and Save as TXT triggers.}
+  \label{fig:app-ui-screenshots}
 \end{figure}
 
 \texttt{OcrResultActivity} provides:
