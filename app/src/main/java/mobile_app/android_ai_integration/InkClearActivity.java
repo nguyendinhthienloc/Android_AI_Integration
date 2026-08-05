@@ -1,6 +1,8 @@
 package mobile_app.android_ai_integration;
 
 import android.app.Activity;
+import android.content.ClipData;
+import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
@@ -46,23 +48,30 @@ public class InkClearActivity extends ComponentActivity {
 
     private final ExecutorService processingExecutor = Executors.newSingleThreadExecutor();
     private int processingGeneration = 0;
+    private int ocrGeneration = 0;
 
     private ImageView documentPreview;
     private View emptyState;
     private ProgressBar processingProgress;
+    private ProgressBar ocrProgress;
     private Button originalButton;
     private Button enhancedButton;
     private Button saveImageButton;
     private Button savePdfButton;
+    private Button recognizeTextButton;
     private SeekBar strengthSlider;
     private TextView strengthValue;
+    private TextView processingMethodBadge;
 
     private Uri selectedImageUri;
     private Bitmap originalBitmap;
     private Bitmap enhancedBitmap;
     private HandwritingEnhancer.Mode selectedMode = HandwritingEnhancer.Mode.NATURAL;
     private boolean showingOriginal = false;
+    private boolean neuralFallbackAnnounced = false;
     private GmsDocumentScanner documentScanner;
+    private NeuralDocumentEnhancer neuralEnhancer;
+    private OfflineOcrEngine ocrEngine;
 
     private final ActivityResultLauncher<IntentSenderRequest> documentScannerLauncher =
             registerForActivityResult(
@@ -100,7 +109,7 @@ public class InkClearActivity extends ComponentActivity {
                 try {
                     getContentResolver().takePersistableUriPermission(
                             uri,
-                            android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION
                     );
                 } catch (SecurityException ignored) {
                     // Some document providers grant access only for the current activity.
@@ -127,10 +136,22 @@ public class InkClearActivity extends ComponentActivity {
             }
     );
 
+    private final ActivityResultLauncher<Intent> ocrResultLauncher = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(),
+            result -> {
+                if (result.getResultCode() == Activity.RESULT_OK) {
+                    recognizeText();
+                }
+            }
+    );
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.ink_clear_activity);
+
+        neuralEnhancer = new NeuralDocumentEnhancer(this);
+        ocrEngine = new OfflineOcrEngine(this);
 
         bindViews();
         configureDocumentScanner();
@@ -156,12 +177,15 @@ public class InkClearActivity extends ComponentActivity {
         documentPreview = findViewById(R.id.document_preview);
         emptyState = findViewById(R.id.empty_state);
         processingProgress = findViewById(R.id.processing_progress);
+        ocrProgress = findViewById(R.id.ocr_progress);
         originalButton = findViewById(R.id.show_original_button);
         enhancedButton = findViewById(R.id.show_enhanced_button);
         saveImageButton = findViewById(R.id.save_image_button);
         savePdfButton = findViewById(R.id.save_pdf_button);
+        recognizeTextButton = findViewById(R.id.recognize_text_button);
         strengthSlider = findViewById(R.id.strength_slider);
         strengthValue = findViewById(R.id.strength_value);
+        processingMethodBadge = findViewById(R.id.processing_method_badge);
     }
 
     private void configureControls() {
@@ -195,7 +219,7 @@ public class InkClearActivity extends ComponentActivity {
         strengthSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                strengthValue.setText(progress + "%");
+                strengthValue.setText(getString(R.string.percent_value, progress));
             }
 
             @Override
@@ -210,6 +234,7 @@ public class InkClearActivity extends ComponentActivity {
 
         saveImageButton.setOnClickListener(view -> imageSaver.launch("InkClear-enhanced.jpg"));
         savePdfButton.setOnClickListener(view -> pdfSaver.launch("InkClear-enhanced.pdf"));
+        recognizeTextButton.setOnClickListener(view -> recognizeText());
         updateControlState(false);
     }
 
@@ -236,7 +261,9 @@ public class InkClearActivity extends ComponentActivity {
     }
 
     private void loadImage(Uri uri) {
+        cancelOcr();
         int requestGeneration = ++processingGeneration;
+        updateControlState(false);
         setBusy(true);
         processingExecutor.execute(() -> {
             try {
@@ -265,7 +292,7 @@ public class InkClearActivity extends ComponentActivity {
         Bitmap decoded;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             ImageDecoder.Source source = ImageDecoder.createSource(getContentResolver(), uri);
-            decoded = ImageDecoder.decodeBitmap(source, (decoder, info, sourceInfo) -> {
+            return ImageDecoder.decodeBitmap(source, (decoder, info, sourceInfo) -> {
                 int width = info.getSize().getWidth();
                 int height = info.getSize().getHeight();
                 float scale = Math.min(1f, MAX_IMAGE_DIMENSION / (float) Math.max(width, height));
@@ -274,7 +301,6 @@ public class InkClearActivity extends ComponentActivity {
                 }
                 decoder.setAllocator(ImageDecoder.ALLOCATOR_SOFTWARE);
             });
-            return decoded;
         }
 
         BitmapFactory.Options bounds = new BitmapFactory.Options();
@@ -340,36 +366,137 @@ public class InkClearActivity extends ComponentActivity {
             return;
         }
 
+        cancelOcr();
         Bitmap source = originalBitmap;
         HandwritingEnhancer.Mode mode = selectedMode;
         int strength = strengthSlider.getProgress();
         int requestGeneration = ++processingGeneration;
+        updateControlState(false);
         setBusy(true);
 
         processingExecutor.execute(() -> {
+            Bitmap result;
+            boolean usedNeuralModel = true;
             try {
-                Bitmap result = HandwritingEnhancer.enhance(source, mode, strength);
-                runOnUiThread(() -> {
-                    if (requestGeneration != processingGeneration || isDestroyed()) {
-                        result.recycle();
-                        return;
-                    }
-                    recycleBitmap(enhancedBitmap);
-                    enhancedBitmap = result;
-                    showingOriginal = false;
-                    setBusy(false);
-                    updateControlState(true);
-                    renderPreview();
-                });
-            } catch (Exception exception) {
-                runOnUiThread(() -> {
-                    if (requestGeneration == processingGeneration) {
-                        setBusy(false);
-                        Toast.makeText(this, R.string.image_process_failed, Toast.LENGTH_LONG).show();
-                    }
-                });
+                result = neuralEnhancer.enhance(source, mode, strength);
+            } catch (Exception neuralError) {
+                usedNeuralModel = false;
+                try {
+                    result = HandwritingEnhancer.enhance(source, mode, strength);
+                } catch (Exception fallbackError) {
+                    runOnUiThread(() -> {
+                        if (requestGeneration == processingGeneration) {
+                            setBusy(false);
+                            Toast.makeText(
+                                    this,
+                                    R.string.image_process_failed,
+                                    Toast.LENGTH_LONG
+                            ).show();
+                        }
+                    });
+                    return;
+                }
+            }
+
+            Bitmap finalResult = result;
+            boolean finalUsedNeuralModel = usedNeuralModel;
+            runOnUiThread(() -> {
+                if (requestGeneration != processingGeneration || isDestroyed()) {
+                    finalResult.recycle();
+                    return;
+                }
+                recycleBitmap(enhancedBitmap);
+                enhancedBitmap = finalResult;
+                showingOriginal = false;
+                processingMethodBadge.setText(
+                        finalUsedNeuralModel
+                                ? R.string.neural_clean_badge
+                                : R.string.classical_fallback_badge
+                );
+                processingMethodBadge.setVisibility(View.VISIBLE);
+                setBusy(false);
+                updateControlState(true);
+                renderPreview();
+
+                if (!finalUsedNeuralModel && !neuralFallbackAnnounced) {
+                    neuralFallbackAnnounced = true;
+                    Toast.makeText(
+                            this,
+                            R.string.neural_fallback_message,
+                            Toast.LENGTH_LONG
+                    ).show();
+                }
+            });
+        });
+    }
+
+    private void recognizeText() {
+        if (enhancedBitmap == null) {
+            return;
+        }
+
+        cancelOcr();
+        int requestGeneration = ++ocrGeneration;
+        Bitmap ocrBitmap = enhancedBitmap.copy(Bitmap.Config.ARGB_8888, false);
+        setOcrBusy(true);
+
+        ocrEngine.recognize(ocrBitmap, new OfflineOcrEngine.Callback() {
+            @Override
+            public void onSuccess(OfflineOcrEngine.Result result) {
+                ocrBitmap.recycle();
+                if (requestGeneration != ocrGeneration || isDestroyed()) {
+                    return;
+                }
+                setOcrBusy(false);
+                openOcrResult(result);
+            }
+
+            @Override
+            public void onFailure(Throwable error) {
+                ocrBitmap.recycle();
+                if (requestGeneration != ocrGeneration || isDestroyed()) {
+                    return;
+                }
+                setOcrBusy(false);
+                Toast.makeText(
+                        InkClearActivity.this,
+                        R.string.ocr_failed,
+                        Toast.LENGTH_LONG
+                ).show();
             }
         });
+    }
+
+    private void openOcrResult(OfflineOcrEngine.Result result) {
+        Intent intent = new Intent(this, OcrResultActivity.class)
+                .putExtra(OcrResultActivity.EXTRA_TEXT, result.getText())
+                .putExtra(OcrResultActivity.EXTRA_LINE_COUNT, result.getLineCount())
+                .putExtra(OcrResultActivity.EXTRA_DURATION_MS, result.getDurationMs())
+                .putExtra(
+                        OcrResultActivity.EXTRA_AVERAGE_CONFIDENCE,
+                        result.getAverageConfidence()
+                );
+
+        if (selectedImageUri != null) {
+            intent.setData(selectedImageUri);
+            intent.setClipData(ClipData.newUri(
+                    getContentResolver(),
+                    "InkClear source",
+                    selectedImageUri
+            ));
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        }
+        ocrResultLauncher.launch(intent);
+    }
+
+    private void cancelOcr() {
+        ocrGeneration++;
+        if (ocrEngine != null) {
+            ocrEngine.cancel();
+        }
+        if (ocrProgress != null) {
+            setOcrBusy(false);
+        }
     }
 
     private void renderPreview() {
@@ -391,9 +518,17 @@ public class InkClearActivity extends ComponentActivity {
                 if (output == null || !bitmap.compress(Bitmap.CompressFormat.JPEG, 95, output)) {
                     throw new IOException("Image compression failed");
                 }
-                runOnUiThread(() -> Toast.makeText(this, R.string.image_saved, Toast.LENGTH_SHORT).show());
+                runOnUiThread(() -> Toast.makeText(
+                        this,
+                        R.string.image_saved,
+                        Toast.LENGTH_SHORT
+                ).show());
             } catch (IOException exception) {
-                runOnUiThread(() -> Toast.makeText(this, R.string.save_failed, Toast.LENGTH_LONG).show());
+                runOnUiThread(() -> Toast.makeText(
+                        this,
+                        R.string.save_failed,
+                        Toast.LENGTH_LONG
+                ).show());
             }
         });
     }
@@ -416,9 +551,17 @@ public class InkClearActivity extends ComponentActivity {
                 canvas.drawBitmap(bitmap, 0f, 0f, new Paint(Paint.FILTER_BITMAP_FLAG));
                 document.finishPage(page);
                 document.writeTo(output);
-                runOnUiThread(() -> Toast.makeText(this, R.string.pdf_saved, Toast.LENGTH_SHORT).show());
+                runOnUiThread(() -> Toast.makeText(
+                        this,
+                        R.string.pdf_saved,
+                        Toast.LENGTH_SHORT
+                ).show());
             } catch (IOException exception) {
-                runOnUiThread(() -> Toast.makeText(this, R.string.save_failed, Toast.LENGTH_LONG).show());
+                runOnUiThread(() -> Toast.makeText(
+                        this,
+                        R.string.save_failed,
+                        Toast.LENGTH_LONG
+                ).show());
             } finally {
                 document.close();
             }
@@ -427,11 +570,13 @@ public class InkClearActivity extends ComponentActivity {
 
     private void setBusy(boolean busy) {
         processingProgress.setVisibility(busy ? View.VISIBLE : View.GONE);
-        if (busy) {
-            documentPreview.setAlpha(0.55f);
-        } else {
-            documentPreview.setAlpha(1f);
-        }
+        documentPreview.setAlpha(busy ? 0.55f : 1f);
+    }
+
+    private void setOcrBusy(boolean busy) {
+        ocrProgress.setVisibility(busy ? View.VISIBLE : View.GONE);
+        recognizeTextButton.setEnabled(!busy && enhancedBitmap != null);
+        recognizeTextButton.setText(busy ? R.string.recognizing : R.string.recognize_text);
     }
 
     private void updateControlState(boolean enabled) {
@@ -439,6 +584,9 @@ public class InkClearActivity extends ComponentActivity {
         enhancedButton.setEnabled(enabled);
         saveImageButton.setEnabled(enabled);
         savePdfButton.setEnabled(enabled);
+        recognizeTextButton.setEnabled(enabled);
+        strengthSlider.setEnabled(enabled);
+        findViewById(R.id.mode_group).setEnabled(enabled);
     }
 
     private void setCheckedMode(HandwritingEnhancer.Mode mode) {
@@ -471,7 +619,12 @@ public class InkClearActivity extends ComponentActivity {
     @Override
     protected void onDestroy() {
         processingGeneration++;
+        cancelOcr();
+        if (ocrEngine != null) {
+            ocrEngine.close();
+        }
         processingExecutor.shutdownNow();
+        neuralEnhancer.close();
         documentPreview.setImageDrawable(null);
         super.onDestroy();
     }

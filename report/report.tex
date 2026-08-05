@@ -10,6 +10,7 @@
 \usepackage{enumitem}
 \usepackage{hyperref}
 \usepackage{listings}
+\usepackage{longtable}
 
 \definecolor{inkblue}{HTML}{17325C}
 \definecolor{codegray}{HTML}{F3F5F7}
@@ -24,9 +25,9 @@
   showstringspaces=false
 }
 
-\title{InkClear: Project Run and Implementation Report}
+\title{InkClear: Pretrained Neural Cleanup and Offline Handwriting OCR}
 \author{Nguyen Trong Van Viet (24125023) \\ Nguyen Hong Tan Tai (24125078) \\ Nguyen Dinh Thien Loc (24125093) \\ Tran Le Anh Tuan (24125107)}
-\date{26 July 2026}
+\date{5 August 2026}
 
 \begin{document}
 \maketitle
@@ -35,11 +36,15 @@
 
 \section{Introduction}
 
-InkClear is an Android application that improves the readability of handwritten document photographs. A user can import an image or scan a single page with Google ML Kit Document Scanner, choose an enhancement mode, tune its strength, compare the source and result, and export the enhanced page as JPEG or PDF. Image processing is performed locally in the app.
+InkClear is an Android application for photographed handwritten documents. The release described in this report combines two pretrained neural pipelines: a document-binarization network cleans shadows and uneven paper, while PP-OCRv5 Mobile detects and recognizes text. Both pipelines are bundled in the application and execute locally. The user starts OCR explicitly, reviews editable text on a dedicated screen, and can copy it or save a UTF-8 text file.
 
-\section{Background}
+No model training is required on the user's computer. The original deterministic enhancer remains available automatically when neural cleanup cannot start.
 
-The repository is a single-module Gradle Android project. The root includes the Gradle wrapper, while the application code and resources are under \texttt{app/}. The relevant configuration is summarized below.
+\section{Product decisions}
+
+The agreed scope is English-first OCR, offline-only inference, one page at a time, explicit recognition after a button tap, a dedicated editable result screen, and plain-text export. Searchable PDF and model training are outside this release. The minimum Android version was allowed to change to satisfy the official mobile OCR SDK.
+
+\section{Project configuration}
 
 \begin{table}[h]
 \centering
@@ -50,94 +55,151 @@ Item & Value \\
 Project name & \texttt{Android\_AI\_Integration} \\
 Application label & InkClear \\
 Application ID & \texttt{mobile\_app.android\_ai\_integration} \\
-Minimum SDK & API 25 \\
+Minimum SDK & API 26 (Android 8.0) \\
 Target SDK & API 36 \\
 Compile SDK & API 37.1 \\
 Gradle wrapper & 9.6.1 \\
 Android Gradle Plugin & 9.3.0 \\
-Java compatibility & 11 \\
-Primary external feature & ML Kit Document Scanner 16.0.0 \\
+Java/Kotlin target & 17 \\
+LiteRT runtime & TensorFlow Lite 2.17.0 \\
+OCR runtime & ONNX Runtime Android 1.21.1 \\
+Computer vision & Official OpenCV Android 4.13.0 \\
 \bottomrule
 \end{tabular}
-\caption{Verified project configuration.}
+\caption{Implemented project configuration.}
 \end{table}
 
-The project uses AndroidX activity, lifecycle, Compose BOM/material dependencies, although the principal screens are XML layouts backed by Java activities. Dependency versions are centralized in \texttt{gradle/libs.versions.toml}.
+The application is primarily Java with XML layouts. A small Kotlin wrapper provides coroutine-based integration with the official Kotlin PaddleOCR SDK. Dependency versions are centralized in \texttt{gradle/libs.versions.toml}.
 
-\section{How to run}
-
-Install Android Studio with SDK Platform 37.1 and use JDK 11 or newer. An emulator or physical device running API 25 or newer is required. The first build needs network access to download the Gradle distribution and Maven dependencies.
-
-From PowerShell at the repository root, build and install the debug application as follows:
-
-\begin{lstlisting}[language={},caption={Windows build commands}]
-.\gradlew.bat assembleDebug
-.\gradlew.bat installDebug
-\end{lstlisting}
-
-The APK is produced at \texttt{app/build/outputs/apk/debug/app-debug.apk}. In Android Studio, open the repository, let Gradle sync complete, select the \texttt{app} configuration, and run it on an API 25+ target. macOS and Linux use \texttt{./gradlew} in place of \texttt{gradlew.bat}.
-
-\section{Technical Approach}
-
-The app is organized around a launcher activity, an editing activity, XML layouts, and a dedicated image-enhancement utility. The build uses Gradle and AndroidX libraries, with ML Kit providing optional document scanning.
+\section{User workflow}
 
 \begin{enumerate}[leftmargin=*]
-  \item \textbf{HomePage} presents the InkClear introduction and opens the editor.
-  \item \textbf{InkClearActivity} accepts an image from the Android document picker or launches ML Kit's scanner for one page.
-  \item The selected image is decoded, EXIF rotation is applied on older Android versions, and large images are limited to a maximum dimension of 1800 pixels.
-  \item The enhanced image is shown in a preview. The user can switch between original and enhanced views, select a visual mode, and change strength.
-  \item The Android document-creation picker saves the result as JPEG or as a one-page PDF.
+  \item The user selects an image or opens the optional one-page document scanner.
+  \item InkClear decodes and bounds the image to a maximum dimension of 1800 pixels.
+  \item Neural Clean runs in the background and displays its result. If loading or inference fails, the classical enhancer is used.
+  \item The user compares Original and Neural Clean, selects Natural, Grayscale, or Black and White, and adjusts strength.
+  \item The user taps Recognize text. PP-OCRv5 detects and recognizes lines locally.
+  \item A dedicated result activity shows the source preview, runtime metadata, confidence, and editable text.
+  \item The user copies text, saves a UTF-8 \texttt{.txt} file, or requests recognition again.
 \end{enumerate}
 
-\section{Enhancement pipeline}
+JPEG and image-only PDF export remain available for the cleaned page.
 
-\texttt{HandwritingEnhancer} converts the source pixels to luminance, estimates the local page background with a separable box blur, and normalizes luminance against that background. Strength controls the ink boost and, for Black and White mode, the binary threshold. Natural mode restores a portion of the original chroma; Grayscale produces equal RGB channels; Black and White emits only black or white pixels.
+\section{Neural Clean pipeline}
 
-Processing runs on a single background executor so image decoding and enhancement do not block the UI thread. A generation counter prevents an older asynchronous load from replacing a newer selection. Bitmaps are recycled when replaced to limit memory pressure.
+\subsection{Model selection}
 
-\section{Demo or Case Study}
+A large SBB cleanup SavedModel was evaluated first. Its float16 conversion remained approximately 75 MB and depended on \texttt{tf.ExtractImagePatches}, requiring TensorFlow Flex. That candidate was rejected for mobile deployment.
 
-The repository includes one local example unit test and one instrumented example test. The local test checks the template arithmetic example. The instrumented test currently asserts the template package name \path{com.example.android_ai_integration}, while the actual manifest and Gradle configuration use \texttt{mobile\_app.android\_ai\_integration}. Therefore the connected test requires that assertion to be corrected before it can be considered a valid project test.
+The selected model is the Apache-2.0 pretrained network from \href{https://github.com/sliedes/binarize}{sliedes/binarize}, revision \texttt{f40863ed4f2869add585f8a133af29c37844ffee}. It has 6,501,345 parameters and was converted from TensorFlow SavedModel to a dynamically weight-quantized 6,906,912-byte LiteRT file.
 
-Recommended commands are:
+\subsection{Input, tiling, and rendering}
 
-\begin{lstlisting}[language={},caption={Test commands}]
-.\gradlew.bat test
-.\gradlew.bat connectedDebugAndroidTest
-\end{lstlisting}
+The model accepts RGB float input with shape \(1 \times 224 \times 224 \times 3\), using pixel values from 0 to 255, and produces one paper/ink logit per pixel. InkClear bounds the inference canvas to 896 pixels, divides it into non-overlapping 224-pixel tiles, applies a stable sigmoid and strength-controlled contrast, and upscales the mask to the source resolution.
 
-\section{Evaluation}
+Natural mode restores limited source chroma; Grayscale emits enhanced luminance; Black and White thresholds the neural mask. This one-pass mobile adaptation is faster than the upstream desktop method, which uses overlaps and rotations, but may lose detail in very small writing.
 
-The scanner is configured for one page and JPEG results. ML Kit availability can vary by device or emulator, so image import is the fallback path. The app does not declare storage permission; it relies on the Android picker and persistable URI access where provided. Large images are downscaled for predictable processing cost. The current test suite is scaffolding rather than feature coverage, and no automated image-quality benchmark is included.
+\subsection{Conversion validation}
 
-\section{Known issues and portability}
+The original TensorFlow and converted LiteRT models were compared on the handwritten DIBCO 2009 sample \texttt{dibco09\_hand\_H01.png}. The mean absolute logit difference was 0.10663 and the maximum was 0.67612. These values validate conversion similarity, not end-user cleanup quality. A separate Android instrumented test runs the packaged model end to end.
 
-The project is portable across computers provided that Android Studio, a compatible JDK, Android SDK Platform 37, an API 25 or newer device/emulator, and network access for the first dependency download are available. The Gradle wrapper supplies the Gradle version, so a global Gradle installation is unnecessary. Android Studio's Embedded JDK 17 or 21 is suitable for the Gradle JDK setting.
+\section{Offline OCR pipeline}
 
-The following findings were verified during execution:
+The project vendors the official PaddleOCR Android SDK at revision:
+\begin{center}
+\texttt{2661c7c0ef5c613e8f93c6e93b2e052399f0f854}
+\end{center}
+It bundles:
 
 \begin{itemize}[leftmargin=*]
-  \item The connected example test previously contained a stale template package assertion. It now uses the built application ID \texttt{mobile\_app.android\_ai\_integration}, and the connected test passed on the tested emulator.
-  \item \texttt{installDebug} installs but does not launch the application. The launcher can be started explicitly with \texttt{adb shell am start -n mobile\_app.android\_integration/.HomePage}.
-  \item The native-library strip message for \texttt{libandroidx.graphics.path.so} is a non-fatal packaging warning; the debug APK installed successfully.
-  \item ML Kit scanning depends on device/emulator support. The Android document picker remains the fallback input path.
+  \item PP-OCRv5 Mobile detection ONNX model, 4,826,518 bytes;
+  \item PP-OCRv5 Mobile recognition ONNX model, 16,534,782 bytes;
+  \item the recognition character configuration;
+  \item ONNX Runtime Android and official OpenCV Android.
 \end{itemize}
 
-With the corrected assertion, another computer should be able to run the project with \texttt{gradlew.bat installDebug} on Windows or \texttt{./gradlew installDebug} on macOS/Linux, assuming the required SDK components and an attached device are available.
-\section{AI Usage Statement}
+\texttt{OfflineOcrEngine} lazily creates the native engine only after the button tap. Detection finds line quadrilaterals; boxes are sorted in reading order; OpenCV performs perspective crops; recognition decodes each crop; and \texttt{OcrTextFormatter} normalizes whitespace while preserving line and paragraph structure.
 
-AI tools supported repository inspection, run-instruction drafting, report composition, and troubleshooting of the Gradle and emulator workflow. Their outputs were verified against the project source files, Gradle configuration, official Gradle checksum data, successful Gradle tasks, emulator installation and launch, connected Android tests, and a successful \texttt{latexmk} compilation. No AI-generated code was accepted without checking it against the implementation and observed build behavior.
+Recognition owns a cancellable job. A request generation counter prevents stale text from opening after the image or enhancement settings have changed. The OCR engine releases ONNX sessions during activity destruction.
+
+\section{Privacy and data handling}
+
+All models are application assets. The source manifest explicitly removes \path{android.permission.INTERNET} and \texttt{ACCESS\_NETWORK\_STATE}, including declarations introduced by transitive libraries. An instrumented test verifies the merged installed package has no Internet permission.
+
+The app does not log image pixels or recognized text, does not retain OCR history, and does not request broad storage access. JPEG, PDF, and TXT output use Android's system document picker. The optional Play-services scanner can be unavailable; the standard image picker is the fallback.
+
+\section{Interface design}
+
+The visual system uses a navy/blue palette, light paper surfaces, Neural Clean and Offline status chips, and a new adaptive launcher icon showing a sheet, handwriting, cleaned lines, and a sparkle. The OCR result screen is scroll-safe under compact displays and large accessibility scaling. It provides editable/selectable text, metadata, character count, Copy, TXT export, retry, and empty-result guidance.
+
+\section{Testing}
+
+\subsection{Local tests}
+
+Local tests cover horizontal whitespace collapse, paragraph preservation, leading/trailing blank removal, empty input, Unicode preservation, and numerical stability of the neural sigmoid.
+
+\subsection{Instrumented tests}
+
+Five instrumented tests pass on the \texttt{Resizable\_Experimental} Android Virtual Device:
+
+\begin{enumerate}[leftmargin=*]
+  \item bundled neural and OCR model assets are present and Internet permission is absent;
+  \item Recognize text is disabled before an image is ready;
+  \item result text is displayed, editable, scroll-safe, and updates its character count;
+  \item the real bundled PP-OCRv5 detector and recognizer execute end to end offline;
+  \item the real bundled LiteRT Neural Clean model executes end to end offline.
+\end{enumerate}
+
+The OCR runtime fixture is PaddleOCR's official \texttt{android\_ocr\_benchmark\_reference.png}. Synthetic English and Unicode strings exercise the formatter and UI.
+
+\subsection{Scope of evaluation data}
+
+The current fixtures prove conversion fidelity, packaging, privacy, lifecycle behavior, UI editing, and native inference. They do not provide a statistically meaningful handwriting-accuracy estimate. A future evaluation should use the IAM Handwriting Database for English line/word samples plus consented phone photographs covering pen, pencil, ruled paper, shadows, glare, cursive, and multiple writers. Character error rate and word error rate should be reported with writer-disjoint splits.
+
+\section{Build and verification}
+
+A valid JDK 17 or 21 and Android SDK Platform 37 are required. The official PaddleOCR Android SDK raises the minimum runtime to API 26. Typical verification commands are:
+
+\begin{lstlisting}[language={},caption={Build and test commands}]
+.\gradlew.bat test
+.\gradlew.bat lint
+.\gradlew.bat assembleDebug
+.\gradlew.bat :app:assembleDebugAndroidTest
+.\gradlew.bat :app:connectedDebugAndroidTest
+\end{lstlisting}
+
+The debug APK is written to \texttt{app/build/outputs/apk/debug/app-debug.apk}. The first developer build needs Internet access to download Maven dependencies, but the installed application does not.
+
+\section{Limitations}
+
+\begin{itemize}[leftmargin=*]
+  \item Dense cursive, touching lines, blur, glare, perspective, abbreviations, equations, and unusual symbols can reduce OCR accuracy.
+  \item English is the release target; incidental recognition of other scripts is not guaranteed.
+  \item Neural cleanup uses an 896-pixel inference bound for responsiveness, which can weaken very small strokes.
+  \item Confidence is an average model score and is not a guarantee of correctness.
+  \item The app processes one page at a time and does not create searchable PDFs.
+  \item Bundled models and native runtimes substantially increase APK size.
+  \item Physical-device latency and memory benchmarking remains necessary before production release.
+\end{itemize}
+
+\section{AI usage statement}
+
+AI tools supported model research, conversion experiments, Android integration, UI concepts, test design, documentation, and troubleshooting. Every delivered path was checked through source inspection and automated builds. The converted model was numerically compared with its original TensorFlow source, and both neural pipelines were executed in Android instrumented tests. Model provenance, licenses, hashes, and known limits are recorded in \texttt{docs/MODELS.md}.
 
 \section{References}
 
 \begin{itemize}[leftmargin=*]
-  \item Android Developers, \href{https://developer.android.com/studio}{Android Studio documentation}.
-  \item Android Developers, \href{https://developer.android.com/build}{Build your app with Gradle}.
-  \item Google Developers, \href{https://developers.google.com/ml-kit/vision/doc-scanner}{ML Kit Document Scanner}.
-  \item Gradle, \href{https://docs.gradle.org/current/userguide/gradle_wrapper.html}{Gradle Wrapper documentation} and \href{https://gradle.org/release-checksums/}{release checksums}.
+  \item PaddlePaddle, \href{https://github.com/PaddlePaddle/PaddleOCR}{PaddleOCR repository and Android SDK}.
+  \item PaddlePaddle, \href{https://huggingface.co/PaddlePaddle/PP-OCRv5_mobile_det_onnx}{PP-OCRv5 Mobile detection ONNX model}.
+  \item PaddlePaddle, \href{https://huggingface.co/PaddlePaddle/PP-OCRv5_mobile_rec_onnx}{PP-OCRv5 Mobile recognition ONNX model}.
+  \item S. Liedes, \href{https://github.com/sliedes/binarize}{Document binarization using deep learning}.
+  \item Google AI Edge, \href{https://ai.google.dev/edge/litert}{LiteRT documentation}.
+  \item Microsoft, \href{https://onnxruntime.ai/docs/get-started/with-java.html}{ONNX Runtime documentation}.
+  \item OpenCV, \href{https://opencv.org/opencv4android-usage-models/}{OpenCV for Android}.
 \end{itemize}
+
 \section{Conclusion}
 
-InkClear is ready to build and run as a small, self-contained Android prototype. The README now records the verified prerequisites, commands, user workflow, project layout, and report compilation command. The next useful engineering step is to replace the example tests with tests for enhancement modes, strength behavior, export, and the corrected application package.
+InkClear now contains meaningful pretrained neural functionality rather than a simulated AI label. It cleans documents with LiteRT, recognizes handwriting with PP-OCRv5, remains usable through a classical fallback, exposes an editable text workflow, and enforces an offline permission boundary. The next engineering milestone is a writer-disjoint English accuracy and performance benchmark on physical devices.
 
 \end{document}

@@ -24,4 +24,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "Android_AI_Integration"
 include(":app")
- 
+include(":ppocr-sdk")

@@ -1,109 +1,107 @@
 # InkClear
 
-InkClear is an Android application for making handwritten document photos easier to read. It can scan a page with Google ML Kit's document scanner or import an existing image, enhance the image on the device, preview the original and enhanced versions, and export the result as JPEG or PDF.
+InkClear is an Android app for privately cleaning and recognizing photographed handwritten notes. It combines a pretrained neural document-cleaning model with a handwriting-aware PP-OCRv5 pipeline. Both models are bundled in the APK and run on-device.
 
 ## Features
 
-- Import a handwritten image with the Android document picker.
-- Scan one page with Google ML Kit Document Scanner when the device supports it.
-- Reduce uneven lighting and shadows with a local background-normalization filter.
-- Choose Natural, Grayscale, or Black & White output.
-- Adjust enhancement strength from 0% to 100%.
-- Save the enhanced result as `InkClear-enhanced.jpg` or `InkClear-enhanced.pdf`.
-- Process images on-device; the app does not request storage permission.
+- Import an image or open the existing one-page document scanner.
+- Neural Clean removes uneven paper backgrounds and shadows with a pretrained segmentation network.
+- Natural, Grayscale, and Black & White rendering modes.
+- Classical enhancement remains an automatic fallback if neural inference cannot start.
+- Tap Recognize text to run bundled PP-OCRv5 detection and recognition.
+- Dedicated, scroll-safe results screen with editable text, confidence/runtime metadata, Copy, retry, and UTF-8 .txt export.
+- Save the cleaned page as JPEG or image-only PDF.
+- New InkClear launcher icon and a consistent navy/blue visual system.
+
+## Privacy and offline behavior
+
+The app manifest explicitly removes INTERNET and ACCESS_NETWORK_STATE, including permissions contributed by transitive dependencies. Neural cleanup, OCR, text editing, and exports therefore operate without network access. Images and recognized text are not uploaded or logged.
+
+The optional Google document-scanner UI is supplied by Google Play services and may be unavailable on some devices. Choose image is always the fallback. The app itself has no network permission.
 
 ## Requirements
 
-- Android Studio with an Android SDK installation.
-- JDK 11 or newer. The project compiles Java sources with Java 11 compatibility.
-- Android SDK Platform 37.1 (the project uses compile SDK 37.1).
-- A device or emulator running Android API 25 or newer.
-- Internet access on the first Gradle build so Gradle and Maven dependencies can be downloaded.
+- Android Studio with Android SDK Platform 37 installed
+- JDK 17 or 21
+- Android 8.0 / API 26 or newer
+- Internet access only for the developer machine's first Gradle dependency download
 
-The Gradle wrapper pins Gradle 9.6.1. The app uses Android Gradle Plugin 9.3.0, targets API 36, and has application ID `mobile_app.android_ai_integration`.
+The minimum SDK was raised from 25 to 26 because the official PaddleOCR Android SDK requires API 26.
 
-## Open and run in Android Studio
+## Build
 
-1. Open the repository root (`Android_AI_Integration`) in Android Studio.
-2. Allow Gradle sync to finish and install any requested SDK components.
-3. Select the `app` run configuration.
-4. Start an API 25+ emulator or connect an Android device with USB debugging enabled.
-5. Click **Run**. The launcher activity opens the InkClear home screen.
+On Windows PowerShell:
 
-The ML Kit scanner may be unavailable on some emulators or devices. The **Choose image** path remains available as a fallback.
-
-## Build from the command line
-
-From the repository root on Windows PowerShell:
-
-```powershell
+~~~powershell
+$env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-21.0.11.10-hotspot"
 .\gradlew.bat assembleDebug
-```
+~~~
 
-The debug APK is written to `app/build/outputs/apk/debug/app-debug.apk`. Install it on a connected device with:
+On macOS/Linux, use ./gradlew. The APK is produced at app/build/outputs/apk/debug/app-debug.apk.
 
-```powershell
-.\gradlew.bat installDebug
-```
+## Use
 
-On macOS/Linux, use `./gradlew` instead of `gradlew.bat`.
+1. Open InkClear and tap Open Neural Clean.
+2. Choose a handwritten image or use AI scan.
+3. Wait for the Neural Clean badge, then compare Original and Neural Clean.
+4. Select Natural, Grayscale, or B&W and adjust Strength if useful.
+5. Tap Recognize text.
+6. Review and edit the text on the dedicated result screen.
+7. Tap Copy, Save as TXT, or Recognize again.
+
+OCR is English-first for this release. The bundled PP-OCRv5 recognizer can decode additional characters, but they are not part of the release acceptance target.
+
+## Architecture
+
+~~~text
+Image URI
+  -> bounded bitmap decode (max 1800 px)
+  -> NeuralDocumentEnhancer / LiteRT (224 px tiles, max 896 px inference canvas)
+  -> classical HandwritingEnhancer fallback
+  -> enhanced preview and JPEG/PDF export
+  -> OfflineOcrEngine
+       -> PP-OCRv5 mobile detector (ONNX Runtime)
+       -> reading-order crop + recognizer (ONNX Runtime/OpenCV)
+       -> OcrTextFormatter
+       -> editable OcrResultActivity
+       -> clipboard or UTF-8 TXT
+~~~
+
+Heavy work runs away from the main thread. Enhancement and OCR each use request-generation/cancellation guards, so a late result cannot replace a newer image. The OCR wrapper owns and releases its native ONNX resources.
+
+Important source files:
+
+- NeuralDocumentEnhancer.java — tiled LiteRT cleanup inference and rendering
+- HandwritingEnhancer.java — deterministic fallback enhancer
+- OfflineOcrEngine.kt — lifecycle-safe PaddleOCR wrapper
+- OcrTextFormatter.java — pure line/whitespace normalization
+- InkClearActivity.java — import, enhancement, recognition, and export workflow
+- OcrResultActivity.java — editable text, Copy, retry, and TXT export
+- ppocr-sdk/ — vendored official PaddleOCR Android SDK source
+
+See [docs/MODELS.md](docs/MODELS.md) for model provenance, checksums, conversion validation, and limitations.
 
 ## Tests
 
-Run local unit tests with:
-
-```powershell
+~~~powershell
 .\gradlew.bat test
-```
+.\gradlew.bat :app:assembleDebugAndroidTest
+.\gradlew.bat :app:connectedDebugAndroidTest
+.\gradlew.bat lint
+.\gradlew.bat assembleDebug
+~~~
 
-Run the connected Android tests with an emulator or device attached:
+Coverage includes OCR text normalization, neural math, bundled model/privacy checks, result editing, and real on-device inference through both LiteRT Neural Clean and PP-OCRv5.
 
-```powershell
-.\gradlew.bat connectedDebugAndroidTest
-```
+## Limitations
 
-The repository contains a local unit test and an instrumented Android test. The instrumented package assertion has been corrected to `mobile_app.android_ai_integration`; both `test` and `connectedDebugAndroidTest` pass in the verified environment.
+- Handwriting OCR is probabilistic. Cursive, overlapping strokes, unusual abbreviations, low-resolution pencil, and severe perspective can still produce errors.
+- The user must review recognized text before relying on or exporting it.
+- Neural cleanup uses a bounded 896 px inference canvas for mobile responsiveness; very tiny writing may lose detail.
+- OCR handles one page at a time and exports plain text, not a searchable PDF.
+- Model and native runtime assets increase APK size.
+- First inference may be slower while native runtimes initialize.
 
-## Typical use
+## Licenses
 
-1. Tap **Choose a handwritten image**.
-2. Select an image, or tap **AI scan** and scan one page.
-3. Select **Natural**, **Grayscale**, or **B&W**.
-4. Adjust **Strength** and compare **Original** with **Enhanced**.
-5. Tap **Save image** or **Save PDF**, then choose a destination in the Android document picker.
-
-## Project layout
-
-```text
-app/src/main/java/.../HomePage.java             Launcher screen
-app/src/main/java/.../InkClearActivity.java    Import, scan, preview, and export flow
-app/src/main/java/.../HandwritingEnhancer.java  On-device image enhancement
-app/src/main/res/layout/                       XML layouts
-app/src/main/res/values/                       Strings, colors, and theme
-app/build.gradle.kts                            Android module configuration
-gradle/libs.versions.toml                       Dependency and plugin versions
-report/                                         LaTeX project report
-```
-
-## Report
-
-The technical report source is in `report/report.tex`. From the repository root, compile it with:
-
-```powershell
-latexmk -pdf -interaction=nonstopmode -halt-on-error -outdir=report report/report.tex
-```
-
-This writes `report/report.pdf` and keeps auxiliary files in `report/`. The report documents the architecture, processing pipeline, build configuration, testing status, and limitations.
-## Known issues and portability
-
-The project can run on another computer when the required Android and Java tooling is installed. The Gradle wrapper downloads Gradle and project dependencies automatically, so a global Gradle installation is not required. The first build needs internet access.
-
-Known issues:
-
-- The instrumented example test previously used the template package ID `com.example.android_ai_integration`; its assertion has been corrected to the actual app ID `mobile_app.android_ai_integration`, and `connectedDebugAndroidTest` now passes on the tested emulator.
-- `installDebug` installs the APK but does not open it. Start it from Android Studio or launch it from a terminal with `adb shell am start -n "mobile_app.android_ai_integration/.HomePage"`.
-- The `libandroidx.graphics.path.so` strip message is a packaging warning. The APK was installed successfully and the warning does not prevent the app from running.
-- ML Kit document scanning may be unavailable on some devices or emulators. Use **Choose image** when **AI scan** is unavailable.
-- The app processes one page at a time and downsizes large images to a maximum dimension of 1800 pixels.
-
-For a different Windows computer, select Android Studio's Embedded JDK (Java 17 or 21) under **Settings > Build, Execution, Deployment > Build Tools > Gradle**, install Android SDK Platform 37 and an API 25+ emulator, then run `gradlew.bat installDebug`. macOS and Linux use `./gradlew`. The repository's wrapper checksum must remain aligned with the official Gradle 9.6.1 binary.
+Bundled model and SDK notices are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), with complete upstream Apache-2.0 texts in the licenses directory.
