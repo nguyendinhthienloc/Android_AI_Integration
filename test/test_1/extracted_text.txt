@@ -1,0 +1,13 @@
+=== InkClear PP-OCRv5 extraction ===
+
+Line 1 [Score: 71.0%]: Dga
+Line 2 [Score: 62.5%]: [s
+Line 3 [Score: 76.2%]: [🕤Beod
+Line 4 [Score: 63.6%]: s[ra
+Line 5 [Score: 74.9%]: sepg🕤[🕤]en[`
+Line 6 [Score: 50.9%]: seoij[
+Line 7 [Score: 67.5%]: d
+Line 8 [Score: 64.2%]: H_kih
+Line 9 [Score: 64.6%]: ,
+
+=== End of extraction ===

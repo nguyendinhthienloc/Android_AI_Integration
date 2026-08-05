@@ -1,0 +1,10 @@
+=== InkClear Extracted Text Output for img_0 ===
+
+Line 1 [Confidence Score: 82.5%]: ni`)[lnep🕤<jc[oau
+Line 2 [Confidence Score: 39.2%]: AJ
+Line 3 [Confidence Score: 78.7%]: iknp`🕤deo🕤b[iehu🕤[jk`
+Line 4 [Confidence Score: 78.8%]: pjki🕤Nkia🕤pk🕤J[lhko
+Line 5 [Confidence Score: 42.9%]: _Uj[a[
+Line 7 [Confidence Score: 72.1%]: anp🕤pk🕤[s[p🕤bda🕤[jr[
+
+=== End of Extracted Text ===
