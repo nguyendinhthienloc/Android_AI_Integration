@@ -43,22 +43,24 @@ SBB's cleaning SavedModel was evaluated first. Its float16 conversion remained a
 
 ## Offline OCR
 
-- SDK: official PaddlePaddle/PaddleOCR Android SDK
-- Vendored SDK revision: 2661c7c0ef5c613e8f93c6e93b2e052399f0f854
+- SDK: official [PaddlePaddle/PaddleOCR Android SDK](https://github.com/PaddlePaddle/PaddleOCR)
+- Vendored SDK revision: `2661c7c0ef5c613e8f93c6e93b2e052399f0f854`
 - Runtime: ONNX Runtime Android 1.21.1 and official OpenCV Android 4.13.0
 - License: Apache-2.0
-- Detection model: PaddlePaddle/PP-OCRv5_mobile_det_onnx
-- Recognition model: PaddlePaddle/PP-OCRv5_mobile_rec_onnx
+- Detection model: [PaddlePaddle/PP-OCRv5_mobile_det_onnx](https://github.com/PaddlePaddle/PaddleOCR)
+- Recognition model: [PaddlePaddle/PP-OCRv5_mobile_rec_onnx](https://github.com/PaddlePaddle/PaddleOCR)
 
 Detection asset:
 
-- size: 4,826,518 bytes
-- SHA-256: A431985659DC921974177A95ADCFBB90FD9E51989A5E04D70D0B75F597B6E61D
+- Repository/Weights: [PP-OCRv5 Mobile Detection ONNX](https://github.com/PaddlePaddle/PaddleOCR)
+- Size: 4,826,518 bytes
+- SHA-256: `A431985659DC921974177A95ADCFBB90FD9E51989A5E04D70D0B75F597B6E61D`
 
 Recognition asset:
 
-- size: 16,534,782 bytes
-- SHA-256: DA72DC72CA4DC220DF0DFDE68C1DEDC31C58D3E76A25871122E5056227D50092
+- Repository/Weights: [PP-OCRv5 Mobile Recognition ONNX](https://github.com/PaddlePaddle/PaddleOCR)
+- Size: 16,534,782 bytes
+- SHA-256: `DA72DC72CA4DC220DF0DFDE68C1DEDC31C58D3E76A25871122E5056227D50092`
 - character configuration: bundled inference.yml
 - release target: English-first handwriting and printed English
 
