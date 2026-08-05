@@ -79,7 +79,7 @@ Important source files:
 - OcrResultActivity.java — editable text, Copy, retry, and TXT export
 - ppocr-sdk/ — vendored official PaddleOCR Android SDK source
 
-See [docs/MODELS.md](docs/MODELS.md) for model provenance, checksums, conversion validation, and limitations.
+See [docs/MODELS.md](docs/MODELS.md) for model provenance, checksums, conversion validation, and limitations. Technical evaluation and failure mode analysis are documented in [docs/EVALUATION.md](docs/EVALUATION.md).
 
 ## Tests
 
