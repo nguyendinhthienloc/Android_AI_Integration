@@ -1,67 +1,73 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/ink_surface"
-    android:gravity="center_horizontal"
-    android:orientation="vertical"
-    android:padding="28dp">
+    android:fillViewport="true"
+    android:background="@color/ink_surface">
 
-    <Space
-        android:layout_width="1dp"
-        android:layout_height="0dp"
-        android:layout_weight="1" />
-
-    <ImageView
-        android:layout_width="124dp"
-        android:layout_height="124dp"
-        android:background="@drawable/preview_background"
-        android:contentDescription="@null"
-        android:padding="8dp"
-        android:src="@drawable/ic_launcher_foreground" />
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
-        android:text="@string/inkclear_title"
-        android:textColor="@color/ink_navy_dark"
-        android:textSize="36sp"
-        android:textStyle="bold" />
-
-    <TextView
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
-        android:gravity="center"
-        android:text="@string/home_description"
-        android:textColor="@color/ink_muted"
-        android:textSize="16sp" />
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:padding="28dp">
 
-    <Button
-        android:id="@+id/open_inkclear_button"
-        android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:layout_marginTop="32dp"
-        android:text="@string/start_enhancing"
-        android:textAllCaps="false"
-        android:textSize="16sp"
-        android:textStyle="bold" />
+        <Space
+            android:layout_width="1dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="14dp"
-        android:background="@drawable/offline_chip_background"
-        android:paddingHorizontal="14dp"
-        android:paddingVertical="8dp"
-        android:text="@string/on_device_note"
-        android:textColor="@color/ink_blue"
-        android:textSize="13sp"
-        android:textStyle="bold" />
+        <ImageView
+            android:layout_width="124dp"
+            android:layout_height="124dp"
+            android:background="@drawable/preview_background"
+            android:contentDescription="@null"
+            android:padding="8dp"
+            android:src="@drawable/ic_launcher_foreground" />
 
-    <Space
-        android:layout_width="1dp"
-        android:layout_height="0dp"
-        android:layout_weight="1" />
-</LinearLayout>
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="@string/inkclear_title"
+            android:textColor="@color/ink_navy_dark"
+            android:textSize="36sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:gravity="center"
+            android:text="@string/home_description"
+            android:textColor="@color/ink_muted"
+            android:textSize="16sp" />
+
+        <Button
+            android:id="@+id/open_inkclear_button"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginTop="32dp"
+            android:text="@string/start_enhancing"
+            android:textAllCaps="false"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:background="@drawable/offline_chip_background"
+            android:paddingHorizontal="14dp"
+            android:paddingVertical="8dp"
+            android:text="@string/on_device_note"
+            android:textColor="@color/ink_blue"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <Space
+            android:layout_width="1dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+    </LinearLayout>
+</ScrollView>

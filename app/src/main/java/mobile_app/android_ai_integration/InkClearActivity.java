@@ -170,6 +170,19 @@ public class InkClearActivity extends ComponentActivity {
                 selectedImageUri = Uri.parse(uriValue);
                 loadImage(selectedImageUri);
             }
+        } else if (getIntent() != null && getIntent().getData() != null) {
+            selectedImageUri = getIntent().getData();
+            loadImage(selectedImageUri);
+        }
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        if (intent != null && intent.getData() != null) {
+            selectedImageUri = intent.getData();
+            loadImage(selectedImageUri);
         }
     }
 
@@ -239,16 +252,28 @@ public class InkClearActivity extends ComponentActivity {
     }
 
     private void configureDocumentScanner() {
-        GmsDocumentScannerOptions options = new GmsDocumentScannerOptions.Builder()
-                .setGalleryImportAllowed(true)
-                .setPageLimit(1)
-                .setResultFormats(GmsDocumentScannerOptions.RESULT_FORMAT_JPEG)
-                .setScannerMode(GmsDocumentScannerOptions.SCANNER_MODE_FULL)
-                .build();
-        documentScanner = GmsDocumentScanning.getClient(options);
+        try {
+            GmsDocumentScannerOptions options = new GmsDocumentScannerOptions.Builder()
+                    .setGalleryImportAllowed(true)
+                    .setPageLimit(1)
+                    .setResultFormats(GmsDocumentScannerOptions.RESULT_FORMAT_JPEG)
+                    .setScannerMode(GmsDocumentScannerOptions.SCANNER_MODE_FULL)
+                    .build();
+            documentScanner = GmsDocumentScanning.getClient(options);
+        } catch (Exception exception) {
+            documentScanner = null;
+        }
     }
 
     private void launchDocumentScanner() {
+        if (documentScanner == null) {
+            Toast.makeText(
+                    this,
+                    R.string.scanner_unavailable,
+                    Toast.LENGTH_LONG
+            ).show();
+            return;
+        }
         documentScanner.getStartScanIntent(this)
                 .addOnSuccessListener(intentSender -> documentScannerLauncher.launch(
                         new IntentSenderRequest.Builder(intentSender).build()
@@ -289,34 +314,35 @@ public class InkClearActivity extends ComponentActivity {
     }
 
     private Bitmap decodeBitmap(Uri uri) throws IOException {
-        Bitmap decoded;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            ImageDecoder.Source source = ImageDecoder.createSource(getContentResolver(), uri);
-            return ImageDecoder.decodeBitmap(source, (decoder, info, sourceInfo) -> {
-                int width = info.getSize().getWidth();
-                int height = info.getSize().getHeight();
-                float scale = Math.min(1f, MAX_IMAGE_DIMENSION / (float) Math.max(width, height));
-                if (scale < 1f) {
-                    decoder.setTargetSize(Math.round(width * scale), Math.round(height * scale));
-                }
-                decoder.setAllocator(ImageDecoder.ALLOCATOR_SOFTWARE);
-            });
+        Bitmap decoded = null;
+        try {
+            BitmapFactory.Options bounds = new BitmapFactory.Options();
+            bounds.inJustDecodeBounds = true;
+            try (InputStream stream = getContentResolver().openInputStream(uri)) {
+                BitmapFactory.decodeStream(stream, null, bounds);
+            }
+
+            BitmapFactory.Options options = new BitmapFactory.Options();
+            options.inPreferredConfig = Bitmap.Config.ARGB_8888;
+            options.inSampleSize = calculateSampleSize(bounds.outWidth, bounds.outHeight);
+            try (InputStream stream = getContentResolver().openInputStream(uri)) {
+                decoded = BitmapFactory.decodeStream(stream, null, options);
+            }
+        } catch (Exception ignored) {
         }
 
-        BitmapFactory.Options bounds = new BitmapFactory.Options();
-        bounds.inJustDecodeBounds = true;
-        try (InputStream stream = getContentResolver().openInputStream(uri)) {
-            BitmapFactory.decodeStream(stream, null, bounds);
+        if (decoded == null && "file".equals(uri.getScheme())) {
+            BitmapFactory.Options bounds = new BitmapFactory.Options();
+            bounds.inJustDecodeBounds = true;
+            BitmapFactory.decodeFile(uri.getPath(), bounds);
+            BitmapFactory.Options options = new BitmapFactory.Options();
+            options.inPreferredConfig = Bitmap.Config.ARGB_8888;
+            options.inSampleSize = calculateSampleSize(bounds.outWidth, bounds.outHeight);
+            decoded = BitmapFactory.decodeFile(uri.getPath(), options);
         }
 
-        BitmapFactory.Options options = new BitmapFactory.Options();
-        options.inPreferredConfig = Bitmap.Config.ARGB_8888;
-        options.inSampleSize = calculateSampleSize(bounds.outWidth, bounds.outHeight);
-        try (InputStream stream = getContentResolver().openInputStream(uri)) {
-            decoded = BitmapFactory.decodeStream(stream, null, options);
-        }
         if (decoded == null) {
-            throw new IOException("Unsupported image");
+            throw new IOException("Failed to decode bitmap from URI: " + uri);
         }
         return applyExifRotation(uri, decoded);
     }
@@ -417,6 +443,10 @@ public class InkClearActivity extends ComponentActivity {
                 setBusy(false);
                 updateControlState(true);
                 renderPreview();
+                if (getIntent() != null && getIntent().getBooleanExtra("auto_ocr", false)) {
+                    getIntent().removeExtra("auto_ocr");
+                    recognizeText();
+                }
 
                 if (!finalUsedNeuralModel && !neuralFallbackAnnounced) {
                     neuralFallbackAnnounced = true;

@@ -1,0 +1,8 @@
+=== InkClear PP-OCRv5 extraction ===
+
+Line 1 [Score: 95.5%]: 大涉壹桥勃钽令扎士涛变
+Line 2 [Score: 99.1%]: 递跷-1甲
+Line 3 [Score: 96.8%]: 绷洛卟桥续芙呆今慨
+Line 4 [Score: 90.6%]: 未递跷.1.5/1甲
+
+=== End of extraction ===
