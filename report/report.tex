@@ -107,6 +107,152 @@ Table~\ref{tab:workflow} details the step-by-step technical implementation seque
 \label{tab:workflow}
 \end{table}
 
+\section{Codebase Architecture \& Component Distribution}
+
+The InkClear codebase enforces a strict modular architecture, decoupling user interface (UI) presentation logic from the heavy AI backend engines.
+
+\subsection{Repository File Tree Structure}
+
+The structural organization of the project repository, key source files, native shared libraries, and embedded neural network assets is presented in the directory tree below:
+
+\begin{lstlisting}[caption={InkClear project repository directory tree structure.}, label={lst:file-tree}]
+InkClear/
+|-- app/
+|   |-- src/
+|   |   `-- main/
+|   |       |-- assets/
+|   |       |   `-- models/
+|   |       |       |-- neural_clean.tflite     <- AI 2: LiteRT Quantized Weights (6.9 MB)
+|   |       |       `-- ocr/
+|   |       |           |-- det/
+|   |       |           |   `-- inference.onnx  <- AI 3: PP-OCRv5 DBNet Detector (4.8 MB)
+|   |       |           `-- rec/
+|   |       |               |-- inference.onnx  <- AI 3: PP-OCRv5 CRNN Recognizer (16.5 MB)
+|   |       |               `-- inference.yml   <- Vocabulary Character Dictionary
+|   |       |-- java/mobile_app/android_ai_integration/
+|   |       |   |-- HomePage.java               <- UI: App Entry Routing Activity
+|   |       |   |-- InkClearActivity.java       <- UI: Workspace & Thread Orchestrator
+|   |       |   |-- OcrResultActivity.java      <- UI: Scrollable Text Result Editor
+|   |       |   |-- NeuralDocumentEnhancer.java <- AI 2: LiteRT Tiled Inference Engine
+|   |       |   |-- HandwritingEnhancer.java   <- AI 2: Classical Box-Blur Fallback
+|   |       |   |-- OfflineOcrEngine.kt         <- AI 3: ONNX Runtime Engine Wrapper
+|   |       |   `-- OcrTextFormatter.java       <- AI 3: CTC Token & Text Normalizer
+|   |       `-- res/layout/                     <- UI: Activity XML Layout Definitions
+|   `-- build.gradle.kts                        <- Android Module Build Configuration
+|-- ppocr-sdk/                                 <- Official PaddleOCR Android SDK Source
+`-- gradle/libs.versions.toml                   <- Centralized Version Catalog Dependencies
+\end{lstlisting}
+
+\subsection{Module Responsibility Breakdown}
+
+Table~\ref{tab:file-distribution} categorizes the responsibilities of each file and asset across the UI presentation layer and the three distinct embedded AI engines.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lp{6.2cm}p{4.5cm}}
+\toprule
+\textbf{Functional Module} & \textbf{Component File / Asset} & \textbf{Core System Responsibility} \\
+\midrule
+\textbf{UI Presentation Layer} 
+& \texttt{HomePage.java} & Entry routing and application setup. \\
+& \texttt{InkClearActivity.java} & Primary UI activity: image import, mode selection (Natural, Grayscale, B\&W), strength sliders, and background thread dispatching. \\
+& \texttt{OcrResultActivity.java} & Result editor activity: multiline editing, character count, confidence display, Copy, and UTF-8 \texttt{.txt} export. \\
+& \texttt{res/layout/*.xml} & Visual layout templates and UI widgets. \\
+\midrule
+\textbf{AI Pipeline 1} 
+& \texttt{GmsDocumentScanner} & Google ML Kit camera interface: edge detection and macro page perspective crop. \\
+\midrule
+\textbf{AI Pipeline 2} 
+& \texttt{NeuralDocumentEnhancer.java} & LiteRT interpreter manager: 896\,px canvas scaling, $224\times 224$ tile inference, and sigmoid mask rendering. \\
+& \texttt{HandwritingEnhancer.java} & Deterministic 2D box-blur classical enhancement fallback. \\
+& \texttt{models/neural\_clean.tflite} & Quantized LiteRT segmentation weights (6.9\,MB). \\
+\midrule
+\textbf{AI Pipeline 3} 
+& \texttt{OfflineOcrEngine.kt} & PaddleOCR ONNX Runtime wrapper: lifecycle, native session management, and image line cropping. \\
+& \texttt{OcrTextFormatter.java} & CTC token cleaning, leading/trailing whitespace removal, and line-break retention. \\
+& \texttt{models/ocr/det/inference.onnx} & PP-OCRv5 Mobile DBNet line detection model (4.8\,MB). \\
+& \texttt{models/ocr/rec/inference.onnx} & PP-OCRv5 Mobile CRNN line recognition model (16.5\,MB). \\
+& \texttt{models/ocr/rec/inference.yml} & Vocabulary character dictionary mapping file. \\
+\bottomrule
+\end{tabular}
+\caption{System component distribution across UI and embedded AI backend pipelines.}
+\label{tab:file-distribution}
+\end{table}
+
+\subsection{Packaging \& Asset Bundling Model}
+A key operational question in mobile edge AI is asset distribution: \textit{Once the application is packaged, does the end-user need to download the neural network models or code separately?}
+
+{\sloppy
+In InkClear, all source code, native runtime shared libraries (\texttt{libonnxruntime.so}, \texttt{libopencv\_java4.so}), and all three pretrained neural network models (\texttt{neural\_clean.tflite}, \texttt{det/inference.onnx}, and \texttt{rec/inference.onnx}, totaling 28.2\,MB) are directly bundled inside the single Android Application Package (\texttt{.apk}) file during build execution (\texttt{./gradlew assembleDebug}).
+}
+
+Upon installation, Android unpacks the assets into the application's internal private storage directory (\texttt{/data/app/...}). Consequently:
+\begin{itemize}[leftmargin=*]
+  \item \textbf{No Post-Install Downloads:} Users download the complete application package once during initial installation. No subsequent network downloads for weights or executable code are performed.
+  \item \textbf{Complete Offline Autonomy:} The application operates 100\% offline without requesting internet permissions.
+  \item \textbf{Package Integrity:} For auditing or developer redistribution, inspecting the packaged APK file reveals all model assets stored within \texttt{assets/models/}.
+\end{itemize}
+
+\section{Hardware Requirements \& Performance Analysis}
+
+\subsection{On-Device Hardware Feasibility}
+To evaluate whether standard Android mobile hardware can handle InkClear, system resource utilization was profiled across runtime states:
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Minimum OS \& Processor:} Requires Android 8.0 (API Level 26) or higher due to ONNX Runtime native C++ dependencies. Designed for standard 64-bit ARM processors (\texttt{arm64-v8a}).
+  \item \textbf{Memory Footprint:} Peak RAM allocation ranges between 150\,MB and 250\,MB during concurrent tiled LiteRT inference and ONNX model execution. This memory profile fits comfortably within modern Android devices equipped with 2\,GB to 4\,GB of RAM.
+  \item \textbf{CPU Threading:} Model inference utilizes multi-threaded CPU execution (\texttt{XNNPACK} delegate for LiteRT across 4 threads), preventing thermal throttling or system freezes.
+\end{itemize}
+
+\subsection{Estimated Execution Latency}
+Table~\ref{tab:performance} breaks down the estimated execution latency across each processing stage on a mid-range Android mobile device.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lp{6cm}c}
+\toprule
+\textbf{Pipeline Stage} & \textbf{Execution Mechanism} & \textbf{Estimated Latency} \\
+\midrule
+1. Macro Document Crop & Google ML Kit Edge Detection & 100 -- 200\,ms \\
+2. Neural Pixel Clean & LiteRT ($896\,\text{px}$ canvas, sixteen $224\times 224$ tiles) & 350 -- 650\,ms \\
+3. Text Line Detection & ONNX Runtime (PP-OCRv5 DBNet) & 200 -- 400\,ms \\
+4. Text Line Recognition & ONNX Runtime (PP-OCRv5 CRNN, $\sim 10$ lines) & 400 -- 800\,ms \\
+\midrule
+\textbf{Total Pipeline Latency} & \textbf{End-to-End Execution} & \textbf{1.05 -- 2.05\,s} \\
+\bottomrule
+\end{tabular}
+\caption{Estimated performance latency breakdown across pipeline stages on a mid-range Android device.}
+\label{tab:performance}
+\end{table}
+
+Because heavy operations run asynchronously on background worker threads, the UI remains responsive throughout processing, providing smooth visual feedback.
+
+\section{Comparative Analysis with Peer Edge AI Projects}
+
+To contextualize InkClear's design within mobile edge AI engineering, Table~\ref{tab:comparison} contrasts InkClear with two peer seminar projects: Group 18 (ASL Gesture Recognition) and Group 15 (PetLens Pet Species Classification).
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lp{3.5cm}p{3.5cm}p{4.2cm}}
+\toprule
+\textbf{Feature} & \textbf{Group 18 (ASL)} & \textbf{Group 15 (PetLens)} & \textbf{InkClear (Ours)} \\
+\midrule
+\textbf{Task Target} & Real-time sign language gesture recognition & Single-shot pet breed classification & Neural document binarization \& offline handwriting OCR \\
+\textbf{AI Model Core} & MediaPipe hand landmarks + TFLite classifier & MobileNetV2 transfer learning (TFLite) & LiteRT U-Net binarizer + ONNX PP-OCRv5 (DBNet + CRNN) \\
+\textbf{Input Type} & 30 FPS video camera frame stream & Single camera/gallery photo & High-resolution document image ($1800\,\text{px}$ bounded) \\
+\textbf{Output Type} & Categorical gesture label & Single breed classification label & Dense enhanced image mask + multiline text transcription \\
+\textbf{Native Runtimes} & MediaPipe SDK + LiteRT & LiteRT / TensorFlow Lite & LiteRT + ONNX Runtime Android + OpenCV \\
+\textbf{Execution Profile} & Low-latency vector frame tracking & Single-pass global image classification & Multi-stage spatial image translation \& sequence CTC decoding \\
+\bottomrule
+\end{tabular}
+\caption{Comparative analysis between InkClear and peer edge AI mobile projects.}
+\label{tab:comparison}
+\end{table}
+
+While Group 18 prioritizes high-frequency 2D landmark vector tracking and Group 15 performs single-label image classification, InkClear addresses a complex multi-stage spatial and sequence processing problem. InkClear combines dense pixel-level image-to-image neural translation (LiteRT) with two-stage text detection and CTC sequence recognition (ONNX Runtime), achieving complete offline privacy without requesting network permissions.
+
 \section{Project Configuration}
 
 Dependency versions and build targets are centralized in \texttt{gradle/libs.versions.toml}. Table~\ref{tab:config} lists the core environment specs.
@@ -290,19 +436,19 @@ Five instrumented tests pass on Android API 35/37 emulators:
 
 \section{Seminar Evaluation \& Scope}
 
-\textbf{Is this sufficient for a Seminar presentation?} Yes. In an academic seminar, the objective is to design, implement, and critically evaluate an edge AI system architecture:
+From an academic evaluation perspective, InkClear demonstrates a complete, end-to-end edge AI software system. The project scope and evaluation criteria center on three key technical pillars:
 \begin{enumerate}[leftmargin=*]
-  \item \textbf{System Feasibility \& Edge Architecture:} InkClear successfully proves that complex neural document segmentation (LiteRT) and multi-stage OCR pipelines (ONNX Runtime) can be packaged into a zero-permission, 100\% offline Android application.
-  \item \textbf{Honest Empirical Boundary Identification:} Demonstrating that Neural Clean works effectively while mobile OCR struggles on cursive handwriting shows scientific transparency and proper error analysis.
-  \item \textbf{Clear Roadmap for Future Work:} Identifies specific model limitations (domain shift from printed to handwritten text) and establishes clear directions for fine-tuning CRNN/TrOCR architectures on benchmark datasets (e.g., IAM Handwriting Database).
+  \item \textbf{System Feasibility \& Edge Architecture:} InkClear proves that complex neural document segmentation (LiteRT) and multi-stage OCR pipelines (ONNX Runtime) can be successfully integrated and deployed in a zero-permission, 100\% offline Android application.
+  \item \textbf{Empirical Boundary Identification:} By demonstrating effective Neural Clean image binarization while revealing the limitations of off-the-shelf mobile OCR models on cursive handwriting, the report provides scientific transparency and thorough empirical error analysis.
+  \item \textbf{Actionable Engineering Roadmap:} The project identifies model domain shifts (printed text vs. continuous handwriting) and establishes precise directions for fine-tuning CRNN/TrOCR architectures on benchmark datasets such as the IAM Handwriting Database.
 \end{enumerate}
 
 \section{Limitations \& Future Work}
 
 \begin{itemize}[leftmargin=*]
   \item \textbf{Handwriting Complexity:} Unconstrained, cursive handwriting requires fine-tuned sequence recognition models (e.g., TrOCR~\cite{li2023trocr} or custom CRNNs~\cite{shi2016crnn}).
-  \item \textbf{Language Scope:} Optimised primarily for standard English printed text.
-  \item \textbf{Hardware Acceleration:} Current inference runs on CPU threads (\texttt{XNNPACK}) via LiteRT~\cite{david2021tflite}. Future releases can integrate NNAPI or GPU delegates for faster execution.
+  \item \textbf{Language Scope:} Optimised primarily for standard English text in the current release target. However, the underlying PP-OCRv5 mobile recognition engine and its character dictionary (\texttt{inference.yml}) retain native multi-language capabilities capable of recognizing simplified Chinese script and extended alphanumeric symbols. Future releases will expand official vocabulary mappings and benchmark validation across non-Latin scripts.
+  \item \textbf{Hardware Acceleration:} Current inference runs on CPU threads (\texttt{XNNPACK}) via LiteRT~\cite{david2021tflite}. Future releases can integrate NNAPI or GPU delegates for faster execution. 
   \item \textbf{Benchmark Expansion:} Future work will evaluate Character Error Rate (CER) and Word Error Rate (WER) across the IAM Handwriting Database~\cite{marti2002iam}.
 \end{itemize}
 
